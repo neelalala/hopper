@@ -48,14 +48,14 @@ func NewWorkerPoolPipeline(processors []ports.Processor, bufferSize, workerCount
 	}, nil
 }
 
-func (p *WorkerPoolPipeline) IngestEvent(e domain.Event) error {
+func (p *WorkerPoolPipeline) IngestEvent(ev domain.Event) error {
 	p.log.Debug(
 		"ingesting event",
-		eventToSlogAttr(e),
+		eventToSlogAttr(ev),
 	)
 
 	select {
-	case p.events <- e:
+	case p.events <- ev:
 		return nil
 	default:
 		return fmt.Errorf("ingest event: %w", domain.ErrChanIsFull)
@@ -102,13 +102,9 @@ func (p *WorkerPoolPipeline) startWorkers(ctx context.Context) {
 
 				select {
 				case <-ctx.Done():
-					return
 				case ev, ok = <-p.events:
-					if !ok {
-						return
-					}
 				}
-				if ctx.Err() != nil {
+				if ctx.Err() != nil || !ok {
 					return
 				}
 
@@ -127,7 +123,7 @@ func (p *WorkerPoolPipeline) startWorkers(ctx context.Context) {
 				}
 
 				if !drop {
-					p.sendContext(workCtx, ev)
+					p.sendProcessed(workCtx, ev)
 				}
 			}
 		})
@@ -137,29 +133,29 @@ func (p *WorkerPoolPipeline) startWorkers(ctx context.Context) {
 	close(workersDone)
 }
 
-func (p *WorkerPoolPipeline) sendContext(ctx context.Context, ev domain.Event) {
+func (p *WorkerPoolPipeline) sendProcessed(ctx context.Context, ev domain.Event) {
 	select {
 	case <-ctx.Done():
-		p.log.Error("error gracefully send processed event", eventToSlogAttr(ev), slog.String("error", ctx.Err().Error()))
+		p.log.Error("error sending processed event", eventToSlogAttr(ev), slog.String("error", ctx.Err().Error()))
 	case p.processed <- ev:
 		return
 	}
 }
 
-func eventToSlogAttr(e domain.Event) slog.Attr {
+func eventToSlogAttr(ev domain.Event) slog.Attr {
 	return slog.Group(
 		"event",
-		slog.String("id", e.ID.String()),
-		slog.String("name", e.Name),
+		slog.String("id", ev.ID.String()),
+		slog.String("name", ev.Name),
 		slog.Group(
 			"user",
-			slog.String("id", e.UserID),
-			slog.String("agent", e.UserAgent),
-			slog.String("device", e.UserDevice),
-			slog.String("os", e.UserOS),
-			slog.String("ip", e.IP),
+			slog.String("id", ev.UserID),
+			slog.String("agent", ev.UserAgent),
+			slog.String("device", ev.UserDevice),
+			slog.String("os", ev.UserOS),
+			slog.String("ip", ev.IP),
 		),
-		slog.Time("client_time", e.ClientTime),
-		slog.Time("server_time", e.ServerTime),
+		slog.Time("client_time", ev.ClientTime),
+		slog.Time("server_time", ev.ServerTime),
 	)
 }

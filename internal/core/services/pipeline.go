@@ -69,15 +69,8 @@ func (p *WorkerPoolPipeline) ProcessedEvents() <-chan domain.Event {
 func (p *WorkerPoolPipeline) Start(ctx context.Context) {
 	p.log.Info("pipeline started")
 
-	for {
-		select {
-		default:
-
-		case <-ctx.Done():
-			p.log.Info("pipeline stopped")
-			return
-		}
-	}
+	p.startWorkers(ctx)
+	p.log.Info("pipeline stopped")
 }
 
 func (p *WorkerPoolPipeline) startWorkers(ctx context.Context) {
@@ -140,10 +133,8 @@ func (p *WorkerPoolPipeline) startWorkers(ctx context.Context) {
 		})
 	}
 
-	go func() {
-		wg.Wait()
-		close(workersDone)
-	}()
+	wg.Wait()
+	close(workersDone)
 }
 
 func (p *WorkerPoolPipeline) sendContext(ctx context.Context, ev domain.Event) {

@@ -70,6 +70,7 @@ func (p *WorkerPoolPipeline) Start(ctx context.Context) {
 	p.log.Info("pipeline started")
 
 	p.startWorkers(ctx)
+	close(p.processed)
 	p.log.Info("pipeline stopped")
 }
 

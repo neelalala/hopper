@@ -1,6 +1,7 @@
 package services
 
 import (
+	"context"
 	"log/slog"
 	"testing"
 	"time"
@@ -70,7 +71,7 @@ func TestPipeline_New(t *testing.T) {
 			pipeline, err := NewWorkerPoolPipeline(
 				[]ports.Processor{},
 				tt.bufferSize,
-				1,
+				tt.workerCount,
 				tt.log,
 			)
 			if tt.wantErr {
@@ -142,13 +143,78 @@ func TestPipeline_IngestEvent(t *testing.T) {
 			pipeline, err := NewWorkerPoolPipeline(nil, tt.bufferSize, 1, log)
 			require.NoError(t, err, "pipeline must be created")
 
-			for _, e := range tt.events {
-				err := pipeline.IngestEvent(e)
+			for _, ev := range tt.events {
+				err := pipeline.IngestEvent(ev)
 				if err != nil {
-					assert.ErrorIs(t, err, tt.wantErr, "wanted error")
-					break
+					if tt.wantErr != nil {
+						assert.ErrorIs(t, err, tt.wantErr, "wanted error")
+						break
+					} else {
+						t.Error("unexpected error", "error", err)
+					}
 				}
 			}
 		})
 	}
+}
+
+func TestPipeline_IngestEvent_ProcessedEvent(t *testing.T) {
+	log := slog.New(slog.DiscardHandler)
+
+	events := []domain.Event{
+		{
+			ID:         uuid.New(),
+			Name:       "login",
+			UserID:     "user-001",
+			UserAgent:  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:159.0) Gecko/20100101 Firefox/159.0",
+			IP:         "127.0.0.1",
+			ClientTime: time.Now().Add(-time.Second),
+			ServerTime: time.Now(),
+		},
+		{
+			ID:         uuid.New(),
+			Name:       "login",
+			UserID:     "user-002",
+			UserAgent:  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:159.0) Gecko/20100101 Firefox/159.0",
+			IP:         "127.0.0.2",
+			ClientTime: time.Now().Add(-time.Second),
+			ServerTime: time.Now(),
+		},
+		{
+			ID:         uuid.New(),
+			Name:       "banner_click",
+			UserID:     "user-001",
+			UserAgent:  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:159.0) Gecko/20100101 Firefox/159.0",
+			IP:         "127.0.0.1",
+			ClientTime: time.Now().Add(-time.Second),
+			ServerTime: time.Now(),
+		},
+	}
+
+	pipeline, err := NewWorkerPoolPipeline(nil, 10, 1, log)
+	require.NoError(t, err, "new pipeline")
+
+	allSent := make(chan struct{})
+
+	go func() {
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		pipeline.Start(ctx)
+		<-allSent
+	}()
+
+	time.Sleep(time.Second)
+
+	for _, ev := range events {
+		err := pipeline.IngestEvent(ev)
+		require.NoError(t, err, "ingest event")
+		select {
+		case got, ok := <-pipeline.ProcessedEvents():
+			require.True(t, ok, "processed evnet chan not closed")
+			assert.Equal(t, ev, got, "ingested and processed event with no processors")
+		case <-time.After(time.Second):
+			t.Error("wanted processed event")
+		}
+	}
+	close(allSent)
 }

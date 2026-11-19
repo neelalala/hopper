@@ -79,6 +79,82 @@ func (p *WorkerPoolPipeline) Start(ctx context.Context) {
 		}
 	}
 }
+
+func (p *WorkerPoolPipeline) startWorkers(ctx context.Context) {
+	workCtx, cancel := context.WithCancel(context.Background())
+	workersDone := make(chan struct{})
+
+	go func() {
+		<-ctx.Done()
+		timer := time.NewTimer(p.WorkerTimeout)
+		defer timer.Stop()
+
+		select {
+		case <-timer.C:
+			cancel()
+		case <-workersDone:
+			cancel()
+		}
+	}()
+
+	var wg sync.WaitGroup
+	for range p.workerCount {
+		wg.Go(func() {
+			for {
+
+				var (
+					ev domain.Event
+					ok bool
+				)
+
+				select {
+				case <-ctx.Done():
+					return
+				case ev, ok = <-p.events:
+					if !ok {
+						return
+					}
+				}
+				if ctx.Err() != nil {
+					return
+				}
+
+				var drop bool
+
+				for _, processor := range p.processors {
+					var err error
+					drop, err = processor.Process(workCtx, &ev)
+					if err != nil {
+						p.log.Error("error processing event", eventToSlogAttr(ev), slog.String("error", err.Error()))
+						drop = true
+					}
+					if drop {
+						break
+					}
+				}
+
+				if !drop {
+					p.sendContext(workCtx, ev)
+				}
+			}
+		})
+	}
+
+	go func() {
+		wg.Wait()
+		close(workersDone)
+	}()
+}
+
+func (p *WorkerPoolPipeline) sendContext(ctx context.Context, ev domain.Event) {
+	select {
+	case <-ctx.Done():
+		p.log.Error("error gracefully send processed event", eventToSlogAttr(ev), slog.String("error", ctx.Err().Error()))
+	case p.processed <- ev:
+		return
+	}
+}
+
 func eventToSlogAttr(e domain.Event) slog.Attr {
 	return slog.Group(
 		"event",

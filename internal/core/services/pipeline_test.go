@@ -13,6 +13,7 @@ import (
 )
 
 func TestPipeline_New(t *testing.T) {
+	log := slog.New(slog.DiscardHandler)
 	tests := []struct {
 		name       string
 		bufferSize int
@@ -22,20 +23,20 @@ func TestPipeline_New(t *testing.T) {
 		{
 			name:       "valid params",
 			bufferSize: 10,
-			log:        slog.New(slog.DiscardHandler),
 			wantErr:    false,
+			log:         log,
 		},
 		{
 			name:       "zero buffer size",
 			bufferSize: 0,
-			log:        slog.New(slog.DiscardHandler),
 			wantErr:    true,
+			log:         log,
 		},
 		{
 			name:       "negative buffer size",
 			bufferSize: -10,
-			log:        slog.New(slog.DiscardHandler),
 			wantErr:    true,
+			log:         log,
 		},
 		{
 			name:       "nil logger",

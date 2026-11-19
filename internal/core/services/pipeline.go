@@ -1,15 +1,23 @@
 package services
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
+	"sync"
+	"time"
 
 	"github.com/neelalala/hopper/internal/core/domain"
 	"github.com/neelalala/hopper/internal/core/ports"
 )
 
-type Pipeline struct {
+const DefaultWorkerTimeout = time.Minute
+
+type WorkerPoolPipeline struct {
 	processors []ports.Processor
+
+	workerCount   int
+	WorkerTimeout time.Duration
 
 	events    chan domain.Event
 	processed chan domain.Event
@@ -17,9 +25,12 @@ type Pipeline struct {
 	log *slog.Logger
 }
 
-func NewPipeline(processors []ports.Processor, bufferSize int, log *slog.Logger) (*Pipeline, error) {
+func NewWorkerPoolPipeline(processors []ports.Processor, bufferSize, workerCount int, log *slog.Logger) (*WorkerPoolPipeline, error) {
 	if bufferSize <= 0 {
-		return nil, fmt.Errorf("buffer size for channels must be positive, got: %d", bufferSize)
+		return nil, fmt.Errorf("buffer size must be positive, got: %d", bufferSize)
+	}
+	if workerCount <= 0 {
+		return nil, fmt.Errorf("worker count must be positive, got: %d", workerCount)
 	}
 	if log == nil {
 		return nil, fmt.Errorf("nil logger")
@@ -27,15 +38,17 @@ func NewPipeline(processors []ports.Processor, bufferSize int, log *slog.Logger)
 	events := make(chan domain.Event, bufferSize)
 	processed := make(chan domain.Event, bufferSize)
 
-	return &Pipeline{
-		processors: processors,
-		events:     events,
-		processed:  processed,
-		log:        log,
+	return &WorkerPoolPipeline{
+		processors:    processors,
+		workerCount:   workerCount,
+		WorkerTimeout: DefaultWorkerTimeout,
+		events:        events,
+		processed:     processed,
+		log:           log,
 	}, nil
 }
 
-func (p *Pipeline) IngestEvent(e domain.Event) error {
+func (p *WorkerPoolPipeline) IngestEvent(e domain.Event) error {
 	p.log.Debug(
 		"ingesting event",
 		eventToSlogAttr(e),
@@ -49,6 +62,23 @@ func (p *Pipeline) IngestEvent(e domain.Event) error {
 	}
 }
 
+func (p *WorkerPoolPipeline) ProcessedEvents() <-chan domain.Event {
+	return p.processed
+}
+
+func (p *WorkerPoolPipeline) Start(ctx context.Context) {
+	p.log.Info("pipeline started")
+
+	for {
+		select {
+		default:
+
+		case <-ctx.Done():
+			p.log.Info("pipeline stopped")
+			return
+		}
+	}
+}
 func eventToSlogAttr(e domain.Event) slog.Attr {
 	return slog.Group(
 		"event",

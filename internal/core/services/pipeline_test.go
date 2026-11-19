@@ -15,40 +15,64 @@ import (
 func TestPipeline_New(t *testing.T) {
 	log := slog.New(slog.DiscardHandler)
 	tests := []struct {
-		name       string
-		bufferSize int
-		log        *slog.Logger
-		wantErr    bool
+		name        string
+		bufferSize  int
+		workerCount int
+		log         *slog.Logger
+		wantErr     bool
 	}{
 		{
-			name:       "valid params",
-			bufferSize: 10,
-			wantErr:    false,
+			name:        "valid params",
+			bufferSize:  10,
+			workerCount: 1,
 			log:         log,
+			wantErr:     false,
 		},
 		{
-			name:       "zero buffer size",
-			bufferSize: 0,
-			wantErr:    true,
+			name:        "zero buffer size",
+			bufferSize:  0,
+			workerCount: 1,
 			log:         log,
+			wantErr:     true,
 		},
 		{
-			name:       "negative buffer size",
-			bufferSize: -10,
-			wantErr:    true,
+			name:        "negative buffer size",
+			bufferSize:  -10,
+			workerCount: 1,
 			log:         log,
+			wantErr:     true,
 		},
 		{
-			name:       "nil logger",
-			bufferSize: 10,
-			log:        nil,
-			wantErr:    true,
+			name:        "nil logger",
+			bufferSize:  10,
+			workerCount: 1,
+			log:         nil,
+			wantErr:     true,
+		},
+		{
+			name:        "zero workers",
+			bufferSize:  10,
+			workerCount: 0,
+			log:         log,
+			wantErr:     true,
+		},
+		{
+			name:        "negative workers",
+			bufferSize:  10,
+			workerCount: -1,
+			log:         log,
+			wantErr:     true,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			pipeline, err := NewPipeline([]ports.Processor{}, tt.bufferSize, tt.log)
+			pipeline, err := NewWorkerPoolPipeline(
+				[]ports.Processor{},
+				tt.bufferSize,
+				1,
+				tt.log,
+			)
 			if tt.wantErr {
 				assert.Error(t, err, "wanted error")
 				assert.Nil(t, pipeline, "pipeline should be nil on error")
@@ -115,7 +139,7 @@ func TestPipeline_IngestEvent(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			pipeline, err := NewPipeline(nil, tt.bufferSize, log)
+			pipeline, err := NewWorkerPoolPipeline(nil, tt.bufferSize, 1, log)
 			require.NoError(t, err, "pipeline must be created")
 
 			for _, e := range tt.events {

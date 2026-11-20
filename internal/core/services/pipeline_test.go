@@ -144,7 +144,7 @@ func TestPipeline_IngestEvent(t *testing.T) {
 			require.NoError(t, err, "pipeline must be created")
 
 			for _, ev := range tt.events {
-				err := pipeline.IngestEvent(ev)
+				err := pipeline.Ingest(ev)
 				if err != nil {
 					if tt.wantErr != nil {
 						assert.ErrorIs(t, err, tt.wantErr, "wanted error")
@@ -206,10 +206,10 @@ func TestPipeline_IngestEvent_ProcessedEvent(t *testing.T) {
 	time.Sleep(time.Second)
 
 	for _, ev := range events {
-		err := pipeline.IngestEvent(ev)
+		err := pipeline.Ingest(ev)
 		require.NoError(t, err, "ingest event")
 		select {
-		case got, ok := <-pipeline.ProcessedEvents():
+		case got, ok := <-pipeline.Processed():
 			require.True(t, ok, "processed evnet chan not closed")
 			assert.Equal(t, ev, got, "ingested and processed event with no processors")
 		case <-time.After(time.Second):

@@ -48,7 +48,7 @@ func NewWorkerPoolPipeline(processors []ports.Processor, bufferSize, workerCount
 	}, nil
 }
 
-func (p *WorkerPoolPipeline) IngestEvent(ev domain.Event) error {
+func (p *WorkerPoolPipeline) Ingest(ev domain.Event) error {
 	p.log.Debug(
 		"ingesting event",
 		eventToSlogAttr(ev),
@@ -62,7 +62,7 @@ func (p *WorkerPoolPipeline) IngestEvent(ev domain.Event) error {
 	}
 }
 
-func (p *WorkerPoolPipeline) ProcessedEvents() <-chan domain.Event {
+func (p *WorkerPoolPipeline) Processed() <-chan domain.Event {
 	return p.processed
 }
 
@@ -102,7 +102,7 @@ func (p *WorkerPoolPipeline) startWorkers(ctx context.Context) {
 				)
 
 				select {
-				case <-ctx.Done():
+				case <-ctx.Done(): // TODO: if ctx.Done(), i want to drain p.events first
 				case ev, ok = <-p.events:
 				}
 				if ctx.Err() != nil || !ok {

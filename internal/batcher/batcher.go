@@ -33,7 +33,7 @@ type Batcher struct {
 
 	eventsCh chan event.Event
 	flushCh  chan []event.Event
-	ticker   time.Ticker
+	ticker   *time.Ticker
 	evRepo   EventRepository
 
 	log *slog.Logger
@@ -55,7 +55,7 @@ func New(evRepo EventRepository, opts ...Option) *Batcher {
 
 	b.eventsCh = make(chan event.Event, b.eventsChSize)
 	b.flushCh = make(chan []event.Event, b.flushChSize)
-	b.ticker = *time.NewTicker(b.batchSendTickerDuration)
+	b.ticker = time.NewTicker(b.batchSendTickerDuration)
 	b.evRepo = evRepo
 
 	return b

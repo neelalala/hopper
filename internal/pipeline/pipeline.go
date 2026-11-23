@@ -17,7 +17,11 @@ const (
 	DefaultWorkerCount   = 16
 )
 
-var ErrChanIsFull = errors.New("chan is full")
+var (
+	ErrChanIsFull     = errors.New("chan is full")
+	ErrShuttingDown   = errors.New("shutting down")
+	ErrAlreadyStopped = errors.New("already stopped")
+)
 
 type Option func(p *Pipeline)
 
@@ -34,7 +38,10 @@ type Pipeline struct {
 	workerCount   int
 	workerTimeout time.Duration
 
-	events    chan event.Event
+	mu     *sync.RWMutex
+	closed bool
+	events chan event.Event
+
 	processed chan event.Event
 
 	log *slog.Logger
@@ -66,12 +73,28 @@ func (p *Pipeline) Ingest(ev event.Event) error {
 		slog.Any("event", ev),
 	)
 
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	if p.closed {
+		return ErrShuttingDown
+	}
 	select {
 	case p.events <- ev:
 		return nil
 	default:
 		return fmt.Errorf("ingest event: %w", ErrChanIsFull)
 	}
+}
+
+func (p *Pipeline) Shutdown() error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.closed {
+		return ErrAlreadyStopped
+	}
+	close(p.events)
+	p.closed = true
+	return nil
 }
 
 func (p *Pipeline) Processed() <-chan event.Event {
@@ -81,12 +104,12 @@ func (p *Pipeline) Processed() <-chan event.Event {
 func (p *Pipeline) Start(ctx context.Context) {
 	p.log.Info("pipeline started")
 
-	p.startWorkers(ctx)
+	p.runWorkers(ctx)
 	close(p.processed)
 	p.log.Info("pipeline stopped")
 }
 
-func (p *Pipeline) startWorkers(ctx context.Context) {
+func (p *Pipeline) runWorkers(ctx context.Context) {
 	var wg sync.WaitGroup
 	for range p.workerCount {
 		wg.Go(func() {

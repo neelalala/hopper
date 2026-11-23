@@ -87,22 +87,6 @@ func (p *Pipeline) Start(ctx context.Context) {
 }
 
 func (p *Pipeline) startWorkers(ctx context.Context) {
-	workCtx, cancel := context.WithCancel(context.Background())
-	workersDone := make(chan struct{})
-
-	go func() {
-		<-ctx.Done()
-		timer := time.NewTimer(p.workerTimeout)
-		defer timer.Stop()
-
-		select {
-		case <-timer.C:
-			cancel()
-		case <-workersDone:
-			cancel()
-		}
-	}()
-
 	var wg sync.WaitGroup
 	for range p.workerCount {
 		wg.Go(func() {
@@ -114,10 +98,15 @@ func (p *Pipeline) startWorkers(ctx context.Context) {
 				)
 
 				select {
-				case <-ctx.Done(): // TODO: if ctx.Done(), i want to drain p.events first
+				case <-ctx.Done():
 				case ev, ok = <-p.events:
+					if !ok {
+						p.log.Info("events drained")
+						return
+					}
 				}
-				if ctx.Err() != nil || !ok {
+				if err := ctx.Err(); err != nil {
+					p.log.Warn("forced stop pipeline", slog.String("error", err.Error()))
 					return
 				}
 
@@ -125,7 +114,7 @@ func (p *Pipeline) startWorkers(ctx context.Context) {
 
 				for _, processor := range p.processors {
 					var err error
-					drop, err = processor.Process(workCtx, &ev)
+					drop, err = processor.Process(ctx, &ev)
 					if err != nil {
 						p.log.Error("error processing event", slog.Any("event", ev), slog.String("error", err.Error()))
 						drop = true
@@ -136,14 +125,13 @@ func (p *Pipeline) startWorkers(ctx context.Context) {
 				}
 
 				if !drop {
-					p.sendProcessed(workCtx, ev)
+					p.sendProcessed(ctx, ev)
 				}
 			}
 		})
 	}
 
 	wg.Wait()
-	close(workersDone)
 }
 
 func (p *Pipeline) sendProcessed(ctx context.Context, ev event.Event) {

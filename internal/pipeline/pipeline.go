@@ -12,7 +12,7 @@ import (
 )
 
 const (
-	DefaultWorkerTimeout = time.Minute
+	DefaultWorkerTimeout = 30 * time.Second
 	DefaultBufferSize    = 10_000
 	DefaultWorkerCount   = 16
 )
@@ -133,28 +133,36 @@ func (p *Pipeline) runWorkers(ctx context.Context) {
 					return
 				}
 
-				var drop bool
-
-				for _, processor := range p.processors {
-					var err error
-					drop, err = processor.Process(ctx, &ev)
-					if err != nil {
-						p.log.Error("error processing event", slog.Any("event", ev), slog.String("error", err.Error()))
-						drop = true
-					}
-					if drop {
-						break
-					}
-				}
+				procCtx, cancel := context.WithTimeout(ctx, p.workerTimeout)
+				drop := p.runProcessors(procCtx, ev)
+				cancel()
 
 				if !drop {
 					p.sendProcessed(ctx, ev)
 				}
+
 			}
 		})
 	}
 
 	wg.Wait()
+}
+
+func (p *Pipeline) runProcessors(ctx context.Context, ev event.Event) bool {
+	var drop bool
+
+	for _, processor := range p.processors {
+		var err error
+		drop, err = processor.Process(ctx, &ev)
+		if err != nil {
+			p.log.Error("error processing event", slog.Any("event", ev), slog.String("error", err.Error()))
+			drop = true
+		}
+		if drop {
+			return drop
+		}
+	}
+	return false
 }
 
 func (p *Pipeline) sendProcessed(ctx context.Context, ev event.Event) {

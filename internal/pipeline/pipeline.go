@@ -12,6 +12,7 @@ import (
 )
 
 const (
+	DefaultSinkTimeout   = 10 * time.Second
 	DefaultWorkerTimeout = 30 * time.Second
 	DefaultBufferSize    = 10_000
 	DefaultWorkerCount   = 16
@@ -26,14 +27,17 @@ var (
 type Option func(p *Pipeline)
 
 type Processor interface {
-	Process(ctx context.Context, event *event.Event) (drop bool, err error)
+	Process(context.Context, *event.Event) (drop bool, err error)
 }
 
-type Pipeline struct {
-	eventsBufferSize    int
-	processedBufferSize int
+type Sink func(context.Context, event.Event) error
 
-	processors []Processor
+type Pipeline struct {
+	eventsBufferSize int
+
+	processors  []Processor
+	sink        Sink
+	sinkTimeout time.Duration
 
 	workerCount   int
 	workerTimeout time.Duration
@@ -42,8 +46,6 @@ type Pipeline struct {
 	closed bool
 	events chan event.Event
 
-	processed chan event.Event
-
 	stopCtx    context.Context
 	stopCancel context.CancelFunc
 	done       chan struct{}
@@ -51,19 +53,20 @@ type Pipeline struct {
 	log *slog.Logger
 }
 
-func New(processors []Processor, opts ...Option) *Pipeline {
+func New(processors []Processor, sink Sink, opts ...Option) *Pipeline {
 	stopCtx, stopCancel := context.WithCancel(context.Background())
 
 	p := &Pipeline{
-		eventsBufferSize:    DefaultBufferSize,
-		processedBufferSize: DefaultBufferSize,
-		processors:          processors,
-		workerCount:         DefaultWorkerCount,
-		workerTimeout:       DefaultWorkerTimeout,
-		stopCtx:             stopCtx,
-		stopCancel:          stopCancel,
-		done:                make(chan struct{}),
-		log:                 slog.New(slog.DiscardHandler),
+		eventsBufferSize: DefaultBufferSize,
+		processors:       processors,
+		sink:             sink,
+		sinkTimeout:      DefaultSinkTimeout,
+		workerCount:      DefaultWorkerCount,
+		workerTimeout:    DefaultWorkerTimeout,
+		stopCtx:          stopCtx,
+		stopCancel:       stopCancel,
+		done:             make(chan struct{}),
+		log:              slog.New(slog.DiscardHandler),
 	}
 
 	for _, opt := range opts {
@@ -71,17 +74,11 @@ func New(processors []Processor, opts ...Option) *Pipeline {
 	}
 
 	p.events = make(chan event.Event, p.eventsBufferSize)
-	p.processed = make(chan event.Event, p.processedBufferSize)
 
 	return p
 }
 
 func (p *Pipeline) Ingest(ev event.Event) error {
-	p.log.Debug(
-		"ingesting event",
-		slog.Any("event", ev),
-	)
-
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 	if p.closed {
@@ -95,13 +92,9 @@ func (p *Pipeline) Ingest(ev event.Event) error {
 	}
 }
 
-func (p *Pipeline) Processed() <-chan event.Event {
-	return p.processed
-}
-
 func (p *Pipeline) Start() {
 	defer func() {
-		close(p.processed)
+		p.stopCancel()
 		close(p.done)
 
 		p.log.Info("pipeline stopped")
@@ -145,12 +138,8 @@ func (p *Pipeline) runWorkers() {
 				select {
 
 				case <-p.stopCtx.Done():
-					select {
-					case _, ok = <-p.events:
-						if ok {
-							p.log.Warn("events left in pipeline")
-						}
-					default:
+					if n := len(p.events); n > 0 {
+						p.log.Warn("events left in pipeline", slog.Int("count", n))
 					}
 					return
 
@@ -161,7 +150,7 @@ func (p *Pipeline) runWorkers() {
 					}
 
 					if p.stopCtx.Err() != nil {
-						p.log.Warn("events left in pipeline")
+						p.log.Warn("events left in pipeline", slog.Int("count", len(p.events)+1))
 						return
 					}
 
@@ -170,7 +159,16 @@ func (p *Pipeline) runWorkers() {
 					cancel()
 
 					if !drop {
-						p.sendProcessed(ev)
+						sinkCtx, cancel := context.WithTimeout(p.stopCtx, p.sinkTimeout)
+						err := p.sink(sinkCtx, ev)
+						cancel()
+						if err != nil {
+							p.log.Error(
+								"send processed event",
+								slog.Any("event", ev),
+								slog.String("error", err.Error()),
+							)
+						}
 					}
 
 				}
@@ -188,7 +186,11 @@ func (p *Pipeline) runProcessors(ctx context.Context, ev *event.Event) bool {
 		var err error
 		drop, err = processor.Process(ctx, ev)
 		if err != nil {
-			p.log.Error("process event", slog.Any("event", ev), slog.String("error", err.Error()))
+			p.log.Error(
+				"process event",
+				slog.Any("event", ev),
+				slog.String("error", err.Error()),
+			)
 			drop = true
 		}
 		if drop {
@@ -196,14 +198,4 @@ func (p *Pipeline) runProcessors(ctx context.Context, ev *event.Event) bool {
 		}
 	}
 	return false
-}
-
-func (p *Pipeline) sendProcessed(ev event.Event) {
-	select {
-	case <-p.stopCtx.Done():
-		p.log.Error("send processed event", slog.Any("event", ev), slog.String("error", p.stopCtx.Err().Error()))
-		return
-	case p.processed <- ev:
-		return
-	}
 }

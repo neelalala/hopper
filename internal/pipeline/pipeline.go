@@ -44,16 +44,25 @@ type Pipeline struct {
 
 	processed chan event.Event
 
+	stopCtx    context.Context
+	stopCancel context.CancelFunc
+	done       chan struct{}
+
 	log *slog.Logger
 }
 
 func New(processors []Processor, opts ...Option) *Pipeline {
+	stopCtx, stopCancel := context.WithCancel(context.Background())
+
 	p := &Pipeline{
 		eventsBufferSize:    DefaultBufferSize,
 		processedBufferSize: DefaultBufferSize,
 		processors:          processors,
 		workerCount:         DefaultWorkerCount,
 		workerTimeout:       DefaultWorkerTimeout,
+		stopCtx:             stopCtx,
+		stopCancel:          stopCancel,
+		done:                make(chan struct{}),
 		log:                 slog.New(slog.DiscardHandler),
 	}
 
@@ -86,30 +95,43 @@ func (p *Pipeline) Ingest(ev event.Event) error {
 	}
 }
 
-func (p *Pipeline) Shutdown() error {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	if p.closed {
-		return ErrAlreadyStopped
-	}
-	close(p.events)
-	p.closed = true
-	return nil
-}
-
 func (p *Pipeline) Processed() <-chan event.Event {
 	return p.processed
 }
 
-func (p *Pipeline) Start(ctx context.Context) {
+func (p *Pipeline) Start() {
+	defer func() {
+		close(p.processed)
+		close(p.done)
+
+		p.log.Info("pipeline stopped")
+	}()
+
 	p.log.Info("pipeline started")
 
-	p.runWorkers(ctx)
-	close(p.processed)
-	p.log.Info("pipeline stopped")
+	p.runWorkers()
 }
 
-func (p *Pipeline) runWorkers(ctx context.Context) {
+func (p *Pipeline) Shutdown(ctx context.Context) error {
+	p.mu.Lock()
+	if p.closed {
+		p.mu.Unlock()
+		return ErrAlreadyStopped
+	}
+	close(p.events)
+	p.closed = true
+	p.mu.Unlock()
+
+	select {
+	case <-ctx.Done():
+		p.stopCancel()
+		return ctx.Err()
+	case <-p.done:
+		return nil
+	}
+}
+
+func (p *Pipeline) runWorkers() {
 	var wg sync.WaitGroup
 	for range p.workerCount {
 		wg.Go(func() {
@@ -121,26 +143,37 @@ func (p *Pipeline) runWorkers(ctx context.Context) {
 				)
 
 				select {
-				case <-ctx.Done():
+
+				case <-p.stopCtx.Done():
+					select {
+					case _, ok = <-p.events:
+						if ok {
+							p.log.Warn("events left in pipeline")
+						}
+					default:
+					}
+					return
+
 				case ev, ok = <-p.events:
 					if !ok {
 						p.log.Info("events drained")
 						return
 					}
-				}
-				if err := ctx.Err(); err != nil {
-					p.log.Warn("forced stop pipeline", slog.String("error", err.Error()))
-					return
-				}
 
-				procCtx, cancel := context.WithTimeout(ctx, p.workerTimeout)
-				drop := p.runProcessors(procCtx, ev)
-				cancel()
+					if p.stopCtx.Err() != nil {
+						p.log.Warn("events left in pipeline")
+						return
+					}
 
-				if !drop {
-					p.sendProcessed(ctx, ev)
+					procCtx, cancel := context.WithTimeout(p.stopCtx, p.workerTimeout)
+					drop := p.runProcessors(procCtx, ev)
+					cancel()
+
+					if !drop {
+						p.sendProcessed(ev)
+					}
+
 				}
-
 			}
 		})
 	}
@@ -155,7 +188,7 @@ func (p *Pipeline) runProcessors(ctx context.Context, ev event.Event) bool {
 		var err error
 		drop, err = processor.Process(ctx, &ev)
 		if err != nil {
-			p.log.Error("error processing event", slog.Any("event", ev), slog.String("error", err.Error()))
+			p.log.Error("process event", slog.Any("event", ev), slog.String("error", err.Error()))
 			drop = true
 		}
 		if drop {
@@ -165,10 +198,11 @@ func (p *Pipeline) runProcessors(ctx context.Context, ev event.Event) bool {
 	return false
 }
 
-func (p *Pipeline) sendProcessed(ctx context.Context, ev event.Event) {
+func (p *Pipeline) sendProcessed(ev event.Event) {
 	select {
-	case <-ctx.Done():
-		p.log.Error("error sending processed event", slog.Any("event", ev), slog.String("error", ctx.Err().Error()))
+	case <-p.stopCtx.Done():
+		p.log.Error("send processed event", slog.Any("event", ev), slog.String("error", p.stopCtx.Err().Error()))
+		return
 	case p.processed <- ev:
 		return
 	}

@@ -1,7 +1,6 @@
 package pipeline
 
 import (
-	"context"
 	"testing"
 	"time"
 	"uuid"
@@ -117,9 +116,7 @@ func TestPipeline_IngestEvent_ProcessedEvent(t *testing.T) {
 	allSent := make(chan struct{})
 
 	go func() {
-		ctx, cancel := context.WithCancel(context.Background())
-		defer cancel()
-		pipeline.Start(ctx)
+		pipeline.Start()
 		<-allSent
 	}()
 

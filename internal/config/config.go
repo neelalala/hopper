@@ -1,6 +1,10 @@
 package config
 
-import "time"
+import (
+	"time"
+
+	"github.com/ilyakaznacheev/cleanenv"
+)
 
 type PipelineConfig struct {
 	SinkTimeout   time.Duration `yaml:"sink-timeout" env:"SINK_TIMEOUT"`
@@ -32,4 +36,14 @@ type Config struct {
 	batcher    BatcherConfig    `yaml:"batcher"`
 	httpServer HTTPServerConfig `yaml:"http-server"`
 	logger     LoggerConfig     `yaml:"logger"`
+}
+
+func Parse(configPath string) (Config, error) {
+	var cfg Config
+	err := cleanenv.ReadConfig(configPath, &cfg)
+	if err != nil {
+		return Config{}, err
+	}
+
+	return cfg, nil
 }

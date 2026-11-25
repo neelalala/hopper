@@ -23,7 +23,12 @@ type BatcherConfig struct {
 }
 
 type HTTPServerConfig struct {
+	// TODO: timeouts
 	Address string `yaml:"address" env:"HTTP_SERVER_ADDRESS"`
+}
+
+type ClickhouseConfig struct {
+	// TODO: dsn
 }
 
 type LoggerConfig struct {
@@ -35,6 +40,7 @@ type Config struct {
 	Pipeline   PipelineConfig   `yaml:"pipeline"`
 	Batcher    BatcherConfig    `yaml:"batcher"`
 	HTTPServer HTTPServerConfig `yaml:"http-server"`
+	Clickhouse ClickhouseConfig `yaml:"clickhouse"`
 	Logger     LoggerConfig     `yaml:"logger"`
 }
 

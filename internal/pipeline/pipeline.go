@@ -38,7 +38,7 @@ type Pipeline struct {
 	workerCount   int
 	workerTimeout time.Duration
 
-	mu     *sync.RWMutex
+	mu     sync.RWMutex
 	closed bool
 	events chan event.Event
 

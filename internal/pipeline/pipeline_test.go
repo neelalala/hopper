@@ -1,137 +1,228 @@
 package pipeline
 
 import (
+	"context"
+	"errors"
 	"testing"
 	"time"
 	"uuid"
 
 	"github.com/neelalala/hopper/internal/event"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 )
 
-func TestPipeline_IngestEvent(t *testing.T) {
-	ev1 := event.Event{
-		ID:         uuid.New(),
-		Name:       "login",
-		UserID:     "user-001",
-		UserAgent:  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:159.0) Gecko/20100101 Firefox/159.0",
-		IP:         "127.0.0.1",
-		ClientTime: time.Now().Add(-time.Second),
-		ServerTime: time.Now(),
-	}
+type mockSink struct {
+	mock.Mock
+}
 
-	ev2 := event.Event{
-		ID:         uuid.New(),
-		Name:       "login",
-		UserID:     "user-002",
-		UserAgent:  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:159.0) Gecko/20100101 Firefox/159.0",
-		IP:         "127.0.0.2",
-		ClientTime: time.Now().Add(-time.Second),
-		ServerTime: time.Now(),
-	}
+func (m *mockSink) Sink(ctx context.Context, ev event.Event) error {
+	args := m.Called(ctx, ev)
+	return args.Error(0)
+}
 
-	ev3 := event.Event{
+type mockProcessor struct {
+	mock.Mock
+}
+
+func (m *mockProcessor) Process(ctx context.Context, ev *event.Event) (bool, error) {
+	args := m.Called(ctx, ev)
+	return args.Bool(0), args.Error(1)
+}
+
+func newTestEvent(name, userID string) event.Event {
+	now := time.Now()
+	return event.Event{
 		ID:         uuid.New(),
-		Name:       "banner_click",
-		UserID:     "user-001",
-		UserAgent:  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:159.0) Gecko/20100101 Firefox/159.0",
+		Name:       name,
+		UserID:     userID,
+		UserAgent:  "Mozilla/5.0",
 		IP:         "127.0.0.1",
-		ClientTime: time.Now().Add(-time.Second),
-		ServerTime: time.Now(),
+		ClientTime: now.Add(-time.Second),
+		ServerTime: now,
 	}
+}
+
+func TestPipeline_Ingest(t *testing.T) {
+	ev1 := newTestEvent("login", "user-001")
+	ev2 := newTestEvent("login", "user-002")
+	ev3 := newTestEvent("banner_click", "user-001")
 
 	tests := []struct {
 		name       string
 		bufferSize int
-		wantErr    error
 		events     []event.Event
+		wantErr    error
 	}{
 		{
-			name:       "buffered pipeline",
+			name:       "buffered pipeline accepts all events",
 			bufferSize: 10,
-			wantErr:    nil,
 			events:     []event.Event{ev1, ev2, ev3},
+			wantErr:    nil,
 		},
 		{
-			name:       "full channel",
+			name:       "full channel returns ErrChanIsFull",
 			bufferSize: 1,
-			wantErr:    ErrChanIsFull,
 			events:     []event.Event{ev1, ev2},
+			wantErr:    ErrChanIsFull,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			pipeline := New(nil, WithBufferSize(tt.bufferSize), WithWorkerCount(1))
+			sink := new(mockSink)
 
+			p := New(nil, sink.Sink, WithBufferSize(tt.bufferSize), WithWorkerCount(1))
+
+			var lastErr error
 			for _, ev := range tt.events {
-				err := pipeline.Ingest(ev)
-				if err != nil {
-					if tt.wantErr != nil {
-						assert.ErrorIs(t, err, tt.wantErr, "wanted error")
-						break
-					} else {
-						t.Error("unexpected error", "error", err)
-					}
+				if err := p.Ingest(ev); err != nil {
+					lastErr = err
+					break
 				}
+			}
+
+			if tt.wantErr != nil {
+				require.ErrorIs(t, lastErr, tt.wantErr)
+			} else {
+				require.NoError(t, lastErr)
 			}
 		})
 	}
 }
 
-func TestPipeline_IngestEvent_ProcessedEvent(t *testing.T) {
-	events := []event.Event{
+func TestPipeline_ProcessAndSendToSink(t *testing.T) {
+	ev1 := newTestEvent("login", "user-001")
+	ev2 := newTestEvent("banner_click", "user-002")
+
+	want1 := ev1
+	want1.Name = "login_enriched"
+	want2 := ev2
+	want2.Name = "banner_click_enriched"
+
+	proc := new(mockProcessor)
+
+	proc.On("Process", mock.Anything, mock.Anything).
+		Run(func(args mock.Arguments) {
+			ev := args.Get(1).(*event.Event)
+			ev.Name += "_enriched"
+		}).
+		Return(false, nil).
+		Times(2)
+
+	sink := new(mockSink)
+	sink.On("Sink", mock.Anything, want1).Return(nil).Once()
+	sink.On("Sink", mock.Anything, want2).Return(nil).Once()
+
+	p := New([]Processor{proc}, sink.Sink, WithBufferSize(10), WithWorkerCount(2))
+	go p.Start()
+
+	require.NoError(t, p.Ingest(ev1))
+	require.NoError(t, p.Ingest(ev2))
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	require.NoError(t, p.Shutdown(ctx))
+
+	proc.AssertExpectations(t)
+	sink.AssertExpectations(t)
+}
+
+func TestPipeline_ProcessorDropsEvents(t *testing.T) {
+	tests := []struct {
+		name    string
+		drop    bool
+		procErr error
+	}{
 		{
-			ID:         uuid.New(),
-			Name:       "login",
-			UserID:     "user-001",
-			UserAgent:  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:159.0) Gecko/20100101 Firefox/159.0",
-			IP:         "127.0.0.1",
-			ClientTime: time.Now().Add(-time.Second),
-			ServerTime: time.Now(),
+			name:    "processor drops event",
+			drop:    true,
+			procErr: nil,
 		},
 		{
-			ID:         uuid.New(),
-			Name:       "login",
-			UserID:     "user-002",
-			UserAgent:  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:159.0) Gecko/20100101 Firefox/159.0",
-			IP:         "127.0.0.2",
-			ClientTime: time.Now().Add(-time.Second),
-			ServerTime: time.Now(),
-		},
-		{
-			ID:         uuid.New(),
-			Name:       "banner_click",
-			UserID:     "user-001",
-			UserAgent:  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:159.0) Gecko/20100101 Firefox/159.0",
-			IP:         "127.0.0.1",
-			ClientTime: time.Now().Add(-time.Second),
-			ServerTime: time.Now(),
+			name:    "processor returns error",
+			drop:    false,
+			procErr: errors.New("error"),
 		},
 	}
 
-	pipeline := New(nil, WithBufferSize(10), WithWorkerCount(1))
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			first := new(mockProcessor)
+			second := new(mockProcessor)
+			sink := new(mockSink)
 
-	allSent := make(chan struct{})
+			first.On("Process", mock.Anything, mock.Anything).
+				Return(tt.drop, tt.procErr).
+				Once()
 
-	go func() {
-		pipeline.Start()
-		<-allSent
-	}()
+			p := New([]Processor{first, second}, sink.Sink, WithBufferSize(10), WithWorkerCount(1))
+			go p.Start()
 
-	time.Sleep(time.Second)
+			require.NoError(t, p.Ingest(newTestEvent("login", "user-001")))
 
-	for _, ev := range events {
-		err := pipeline.Ingest(ev)
-		require.NoError(t, err, "ingest event")
-		select {
-		case got, ok := <-pipeline.Processed():
-			require.True(t, ok, "processed evnet chan not closed")
-			assert.Equal(t, ev, got, "ingested and processed event with no processors")
-		case <-time.After(time.Second):
-			t.Error("wanted processed event")
-		}
+			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+			defer cancel()
+			require.NoError(t, p.Shutdown(ctx))
+
+			first.AssertExpectations(t)
+			second.AssertNotCalled(t, "Process", mock.Anything, mock.Anything)
+			sink.AssertNotCalled(t, "Sink", mock.Anything, mock.Anything)
+		})
 	}
-	close(allSent)
+}
+
+func TestPipeline_ShutdownErrors(t *testing.T) {
+	sink := new(mockSink)
+	p := New(nil, sink.Sink, WithBufferSize(10), WithWorkerCount(1))
+	go p.Start()
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+
+	require.NoError(t, p.Shutdown(ctx))
+	assert.ErrorIs(t, p.Shutdown(ctx), ErrAlreadyStopped)
+	assert.ErrorIs(t, p.Ingest(newTestEvent("login", "user-001")), ErrShuttingDown)
+}
+
+func TestPipeline_ShutdownTimeout(t *testing.T) {
+	ev := newTestEvent("slow_event", "user-001")
+	sinkStarted := make(chan struct{})
+
+	sink := new(mockSink)
+	sink.On("Sink", mock.Anything, ev).
+		Run(func(args mock.Arguments) {
+			close(sinkStarted)
+
+			ctx := args.Get(0).(context.Context)
+			<-ctx.Done()
+		}).
+		Return(context.Canceled).
+		Once()
+
+	p := New(nil, sink.Sink, WithBufferSize(10), WithWorkerCount(1))
+	go p.Start()
+
+	require.NoError(t, p.Ingest(ev))
+
+	select {
+	case <-sinkStarted:
+	case <-time.After(time.Second):
+		t.Fatal("sink was not called in time")
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+
+	err := p.Shutdown(ctx)
+	require.ErrorIs(t, err, context.DeadlineExceeded)
+
+	select {
+	case <-p.done:
+	case <-time.After(time.Second):
+		t.Fatal("pipeline did not stop after cancel")
+	}
+
+	sink.AssertExpectations(t)
 }

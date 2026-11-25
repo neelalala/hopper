@@ -166,7 +166,7 @@ func (p *Pipeline) runWorkers() {
 					}
 
 					procCtx, cancel := context.WithTimeout(p.stopCtx, p.workerTimeout)
-					drop := p.runProcessors(procCtx, ev)
+					drop := p.runProcessors(procCtx, &ev)
 					cancel()
 
 					if !drop {
@@ -181,12 +181,12 @@ func (p *Pipeline) runWorkers() {
 	wg.Wait()
 }
 
-func (p *Pipeline) runProcessors(ctx context.Context, ev event.Event) bool {
+func (p *Pipeline) runProcessors(ctx context.Context, ev *event.Event) bool {
 	var drop bool
 
 	for _, processor := range p.processors {
 		var err error
-		drop, err = processor.Process(ctx, &ev)
+		drop, err = processor.Process(ctx, ev)
 		if err != nil {
 			p.log.Error("process event", slog.Any("event", ev), slog.String("error", err.Error()))
 			drop = true

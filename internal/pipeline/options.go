@@ -1,6 +1,9 @@
 package pipeline
 
-import "log/slog"
+import (
+	"log/slog"
+	"time"
+)
 
 func WithBufferSize(size int) Option {
 	if size < 0 {
@@ -8,25 +11,6 @@ func WithBufferSize(size int) Option {
 	}
 	return func(p *Pipeline) {
 		p.eventsBufferSize = size
-		p.processedBufferSize = size
-	}
-}
-
-func WithEventsBufferSize(size int) Option {
-	if size < 0 {
-		panic("negative events buffer size")
-	}
-	return func(p *Pipeline) {
-		p.eventsBufferSize = size
-	}
-}
-
-func WithProcessedBufferSize(size int) Option {
-	if size < 0 {
-		panic("negative buffer size")
-	}
-	return func(p *Pipeline) {
-		p.processedBufferSize = size
 	}
 }
 
@@ -36,6 +20,24 @@ func WithWorkerCount(count int) Option {
 	}
 	return func(p *Pipeline) {
 		p.workerCount = count
+	}
+}
+
+func WithWorkerTimeout(timeout time.Duration) Option {
+	if timeout <= 0 {
+		panic("worker timeout must be positive")
+	}
+	return func(p *Pipeline) {
+		p.workerTimeout = timeout
+	}
+}
+
+func WithSinkTimeout(timeout time.Duration) Option {
+	if timeout <= 0 {
+		panic("sink timeout must be positive")
+	}
+	return func(p *Pipeline) {
+		p.workerTimeout = timeout
 	}
 }
 

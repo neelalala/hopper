@@ -129,12 +129,6 @@ func (p *Pipeline) runWorkers() {
 	for range p.workerCount {
 		wg.Go(func() {
 			for {
-
-				var (
-					ev event.Event
-					ok bool
-				)
-
 				select {
 
 				case <-p.stopCtx.Done():
@@ -143,7 +137,7 @@ func (p *Pipeline) runWorkers() {
 					}
 					return
 
-				case ev, ok = <-p.events:
+				case ev, ok := <-p.events:
 					if !ok {
 						p.log.Info("events drained")
 						return

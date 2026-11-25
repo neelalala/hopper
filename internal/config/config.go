@@ -23,13 +23,13 @@ type HTTPServerConfig struct {
 }
 
 type LoggerConfig struct {
-	Level     string
-	AddSource bool
+	Level     string `yaml:"level" env:"LOG_LEVEL"`
+	AddSource bool   `yaml:"add-sorce" env:"LOG_ADD_SOURCE"`
 }
 
 type Config struct {
 	pipeline   PipelineConfig   `yaml:"pipeline"`
 	batcher    BatcherConfig    `yaml:"batcher"`
 	httpServer HTTPServerConfig `yaml:"http-server"`
-	logger     LoggerConfig
+	logger     LoggerConfig     `yaml:"logger"`
 }

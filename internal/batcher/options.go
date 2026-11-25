@@ -6,55 +6,55 @@ import (
 )
 
 func WithBatchSize(size int) Option {
+	if size <= 0 {
+		panic("batch size must be postitive")
+	}
 	return func(b *Batcher) {
-		if size <= 0 {
-			panic("not positive batch size")
-		}
 		b.batchSize = size
 	}
 }
 
 func WithFlushChanBufferSize(size int) Option {
+	if size < 0 {
+		panic("negative flush buffer size")
+	}
 	return func(b *Batcher) {
-		if size < 0 {
-			panic("negative flush buffer size")
-		}
 		b.flushChSize = size
 	}
 }
 
 func WithEventsChanBufferSize(size int) Option {
+	if size < 0 {
+		panic("negative evnts buffer size")
+	}
 	return func(b *Batcher) {
-		if size < 0 {
-			panic("negative eevnts buffer size")
-		}
 		b.flushChSize = size
 	}
 }
 
 func WithWorkerCount(count int) Option {
+	if count <= 0 {
+		panic("worker count must be postitive")
+	}
 	return func(b *Batcher) {
-		if count <= 0 {
-			panic("not positive worker count")
-		}
 		b.workerCount = count
 	}
 }
 
 func WithSendTickerDuration(duration time.Duration) Option {
+	if duration < 0 {
+		panic("negative ticker duration")
+	}
 	return func(b *Batcher) {
-		if duration < 0 {
-			panic("negative ticker duration")
-		}
 		b.batchSendTickerDuration = duration
 	}
 }
 
 func WithLogger(log *slog.Logger) Option {
+	if log == nil {
+		log = slog.New(slog.DiscardHandler)
+	}
 	return func(b *Batcher) {
-		if log == nil {
-			log = slog.New(slog.DiscardHandler)
-		}
 		b.log = log
 	}
 }

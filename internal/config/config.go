@@ -32,10 +32,10 @@ type LoggerConfig struct {
 }
 
 type Config struct {
-	pipeline   PipelineConfig   `yaml:"pipeline"`
-	batcher    BatcherConfig    `yaml:"batcher"`
-	httpServer HTTPServerConfig `yaml:"http-server"`
-	logger     LoggerConfig     `yaml:"logger"`
+	Pipeline   PipelineConfig   `yaml:"pipeline"`
+	Batcher    BatcherConfig    `yaml:"batcher"`
+	HTTPServer HTTPServerConfig `yaml:"http-server"`
+	Logger     LoggerConfig     `yaml:"logger"`
 }
 
 func Parse(configPath string) (Config, error) {

@@ -19,7 +19,7 @@ type BatcherConfig struct {
 }
 
 type HTTPServerConfig struct {
-	Address string
+	Address string `yaml:"address" env:"HTTP_SERVER_ADDRESS"`
 }
 
 type LoggerConfig struct {
@@ -30,6 +30,6 @@ type LoggerConfig struct {
 type Config struct {
 	pipeline   PipelineConfig   `yaml:"pipeline"`
 	batcher    BatcherConfig    `yaml:"batcher"`
-	httpServer HTTPServerConfig
+	httpServer HTTPServerConfig `yaml:"http-server"`
 	logger     LoggerConfig
 }

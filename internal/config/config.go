@@ -3,10 +3,10 @@ package config
 import "time"
 
 type PipelineConfig struct {
-	SinkTimeout   time.Duration
-	WorkerTimeout time.Duration
-	BufferSize    int
-	WorkerCount   int
+	SinkTimeout   time.Duration `yaml:"sink-timeout" env:"SINK_TIMEOUT"`
+	WorkerTimeout time.Duration `yaml:"worker-timeout" env:"PIPELINE_WORKER_TIMEOUT"`
+	BufferSize    int           `yaml:"buffer-size" env:"PIPELINE_BUFFER_SIZE"`
+	WorkerCount   int           `yaml:"worker-count" env:"PIPELINE_WORKER_COUNT"`
 }
 
 type BatcherConfig struct {
@@ -28,7 +28,7 @@ type LoggerConfig struct {
 }
 
 type Config struct {
-	pipeline   PipelineConfig
+	pipeline   PipelineConfig `yaml:"pipeline"`
 	batcher    BatcherConfig
 	httpServer HTTPServerConfig
 	logger     LoggerConfig

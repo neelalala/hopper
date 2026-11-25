@@ -50,6 +50,15 @@ func WithSendTickerDuration(duration time.Duration) Option {
 	}
 }
 
+func WithWorkerTimeout(timeout time.Duration) Option {
+	if timeout <= 0 {
+		panic("worker timeout must be positive")
+	}
+	return func(b *Batcher) {
+		b.workerTimeout = timeout
+	}
+}
+
 func WithLogger(log *slog.Logger) Option {
 	if log == nil {
 		log = slog.New(slog.DiscardHandler)

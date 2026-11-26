@@ -68,4 +68,8 @@ TBD
 
 ## Состояние проекта
 
-[Этап 1. MVP / v0.1](ROADMAP.md) Активная разработка
+- [Этап 1. Core / v0.1](ROADMAP.md) Активная разработка
+- Этап 2. Configurable pipeline / v0.2
+- Этап 3. Lua-scripts / v0.3
+- Этап 4. Dynamic ClickHouse schema / v0.4
+- Этап 5. MVP / v1.0

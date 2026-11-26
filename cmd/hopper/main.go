@@ -44,6 +44,7 @@ func run(cfg config.Config, log *slog.Logger) error {
 	if err != nil {
 		return fmt.Errorf("create event repository: %w", err)
 	}
+	defer evRepo.Close()
 
 	batcherOpts := makeBatcherOptions(cfg.Batcher)
 	batcherOpts = append(batcherOpts, batcher.WithLogger(log.With(slog.String("service", "batcher"))))

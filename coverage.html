@@ -319,35 +319,35 @@ func New(evRepo EventRepository, opts ...Option) *Batcher {
 }
 
 func (b *Batcher) Add(ctx context.Context, ev event.Event) error {
-        <span class="cov9" title="10061">b.mu.RLock()
+        <span class="cov9" title="16192">b.mu.RLock()
         defer b.mu.RUnlock()
 </span>
-        <span class="cov9" title="10061">select </span>{
+        <span class="cov9" title="16192">select </span>{
         case &lt;-b.closing:
-                <span class="cov3" title="21">return ErrShuttingDown</span>
-        default:<span class="cov9" title="10040"></span>
+                <span class="cov3" title="20">return ErrShuttingDown</span>
+        default:<span class="cov9" title="16172"></span>
         }
 
-        <span class="cov9" title="10040">select </span>{
+        <span class="cov9" title="16172">select </span>{
         case &lt;-ctx.Done():
                 <span class="cov2" title="5">return ctx.Err()</span>
         case b.eventsCh &lt;- ev:
-                <span class="cov9" title="10026">return nil</span>
+                <span class="cov9" title="16157">return nil</span>
         case &lt;-b.closing:
-                <span class="cov3" title="9">return ErrShuttingDown</span>
+                <span class="cov3" title="10">return ErrShuttingDown</span>
         }
 }
 
 func (b *Batcher) Start() {
-        <span class="cov5" title="70">defer func() </span>{
-                <span class="cov5" title="70">b.stopCancel()
+        <span class="cov4" title="70">defer func() </span>{
+                <span class="cov4" title="70">b.stopCancel()
                 close(b.done)
 </span>
-                <span class="cov5" title="70">b.log.Info("batcher stopped")
+                <span class="cov4" title="70">b.log.Info("batcher stopped")
 </span>        }()
-        <span class="cov5" title="70">b.log.Info("batcher started")
+        <span class="cov4" title="70">b.log.Info("batcher started")
 </span>
-        <span class="cov5" title="70">var workersWg sync.WaitGroup
+        <span class="cov4" title="70">var workersWg sync.WaitGroup
         workersWg.Go(b.startWorkers)
         b.startLoop()
         close(b.flushCh)
@@ -357,18 +357,18 @@ func (b *Batcher) Start() {
 func (b *Batcher) Shutdown(ctx context.Context) error {
         <span class="cov5" title="75">alreadyStopped := true
         b.closeOnce.Do(func() </span>{
-                <span class="cov5" title="70">alreadyStopped = false
+                <span class="cov4" title="70">alreadyStopped = false
                 close(b.closing)
 </span>        })
         <span class="cov5" title="75">if alreadyStopped </span>{
                 <span class="cov2" title="5">return ErrAlreadyStoppped
 </span>        }
 
-        <span class="cov5" title="70">b.mu.Lock()
+        <span class="cov4" title="70">b.mu.Lock()
         close(b.eventsCh)
         b.mu.Unlock()
 </span>
-        <span class="cov5" title="70">select </span>{
+        <span class="cov4" title="70">select </span>{
         case &lt;-ctx.Done():
                 <span class="cov3" title="10">b.stopCancel()
                 return ctx.Err()</span>
@@ -378,35 +378,35 @@ func (b *Batcher) Shutdown(ctx context.Context) error {
 }
 
 func (b *Batcher) startLoop() {
-        <span class="cov5" title="70">ticker := time.NewTicker(b.batchSendTickerDuration)
+        <span class="cov4" title="70">ticker := time.NewTicker(b.batchSendTickerDuration)
         defer ticker.Stop()
 </span>
-        <span class="cov5" title="70">batch := make([]event.Event, 0, b.batchSize)
+        <span class="cov4" title="70">batch := make([]event.Event, 0, b.batchSize)
         for </span>{
-                <span class="cov10" title="10111">select </span>{
+                <span class="cov10" title="16242">select </span>{
 
                 case &lt;-b.stopCtx.Done():
-                        <span class="cov2" title="3">if n := len(b.eventsCh) + len(batch); n &gt; 0 </span>{
+                        <span class="cov1" title="2">if n := len(b.eventsCh) + len(batch); n &gt; 0 </span>{
                                 <span class="cov0" title="0">b.log.Warn("events left in batcher", slog.Int("count", n))
 </span>                        }
-                        <span class="cov2" title="3">return</span>
+                        <span class="cov1" title="2">return</span>
 
                 case ev, ok := &lt;-b.eventsCh:
-                        <span class="cov9" title="10088">if !ok </span>{
-                                <span class="cov5" title="67">b.flush(batch)
+                        <span class="cov9" title="16220">if !ok </span>{
+                                <span class="cov4" title="68">b.flush(batch)
                                 b.log.Info("events drained")
                                 return
 </span>                        }
 
-                        <span class="cov9" title="10021">if b.stopCtx.Err() != nil </span>{
+                        <span class="cov9" title="16152">if b.stopCtx.Err() != nil </span>{
                                 <span class="cov0" title="0">b.log.Warn("events left in batcher", slog.Int("count", len(b.eventsCh)+len(batch)+1))
                                 return
 </span>                        }
 
-                        <span class="cov9" title="10021">batch = append(batch, ev)
+                        <span class="cov9" title="16152">batch = append(batch, ev)
 </span>
-                        <span class="cov9" title="10021">if len(batch) == b.batchSize </span>{
-                                <span class="cov8" title="2050">batch = b.flush(batch)
+                        <span class="cov9" title="16152">if len(batch) == b.batchSize </span>{
+                                <span class="cov8" title="3276">batch = b.flush(batch)
                                 ticker.Reset(b.batchSendTickerDuration)
 </span>                        }
 
@@ -417,12 +417,12 @@ func (b *Batcher) startLoop() {
 }
 
 func (b *Batcher) flush(batch []event.Event) []event.Event {
-        <span class="cov8" title="2137">if len(batch) == 0 </span>{
-                <span class="cov5" title="69">return batch
+        <span class="cov8" title="3364">if len(batch) == 0 </span>{
+                <span class="cov4" title="69">return batch
 </span>        }
-        <span class="cov8" title="2068">select </span>{
+        <span class="cov8" title="3295">select </span>{
         case b.flushCh &lt;- batch:
-                <span class="cov8" title="2063">return make([]event.Event, 0, b.batchSize)</span>
+                <span class="cov8" title="3290">return make([]event.Event, 0, b.batchSize)</span>
         case &lt;-b.stopCtx.Done():
                 <span class="cov2" title="5">b.log.Warn("batch dropped on shutdown", slog.Int("count", len(batch)))
                 return nil</span>
@@ -430,30 +430,30 @@ func (b *Batcher) flush(batch []event.Event) []event.Event {
 }
 
 func (b *Batcher) startWorkers() {
-        <span class="cov5" title="70">var wg sync.WaitGroup
+        <span class="cov4" title="70">var wg sync.WaitGroup
         for range b.workerCount </span>{
                 <span class="cov5" title="90">wg.Go(func() </span>{
                         <span class="cov5" title="90">for </span>{
-                                <span class="cov8" title="2153">select </span>{
+                                <span class="cov8" title="3380">select </span>{
 
                                 case &lt;-b.stopCtx.Done():
-                                        <span class="cov2" title="5">if n := len(b.flushCh); n &gt; 0 </span>{
+                                        <span class="cov2" title="7">if n := len(b.flushCh); n &gt; 0 </span>{
                                                 <span class="cov0" title="0">b.log.Warn("batches left in bathcer", slog.Int("count", n))
 </span>                                        }
-                                        <span class="cov2" title="5">return</span>
+                                        <span class="cov2" title="7">return</span>
 
                                 case batch, ok := &lt;-b.flushCh:
-                                        <span class="cov8" title="2148">if !ok </span>{
-                                                <span class="cov5" title="85">b.log.Info("batches drained")
+                                        <span class="cov8" title="3373">if !ok </span>{
+                                                <span class="cov5" title="83">b.log.Info("batches drained")
                                                 return
 </span>                                        }
 
-                                        <span class="cov8" title="2063">if b.stopCtx.Err() != nil </span>{
+                                        <span class="cov8" title="3290">if b.stopCtx.Err() != nil </span>{
                                                 <span class="cov0" title="0">b.log.Warn("bathces left in batcher", slog.Int("count", len(b.flushCh)+1))
                                                 return
 </span>                                        }
 
-                                        <span class="cov8" title="2063">workCtx, workCancel := context.WithTimeout(b.stopCtx, b.workerTimeout)
+                                        <span class="cov8" title="3290">workCtx, workCancel := context.WithTimeout(b.stopCtx, b.workerTimeout)
                                         err := b.evRepo.CreateEvents(workCtx, batch)
                                         workCancel()
                                         if err != nil </span>{
@@ -465,7 +465,7 @@ func (b *Batcher) startWorkers() {
                 })
         }
 
-        <span class="cov5" title="70">wg.Wait()</span>
+        <span class="cov4" title="70">wg.Wait()</span>
 }
 </pre>
 		
@@ -832,16 +832,16 @@ func New(processors []Processor, sink Sink, opts ...Option) *Pipeline {
 }
 
 func (p *Pipeline) Ingest(ev event.Event) error {
-        <span class="cov10" title="4573">p.mu.RLock()
+        <span class="cov10" title="3999">p.mu.RLock()
         defer p.mu.RUnlock()
         if p.closed </span>{
                 <span class="cov4" title="30">return ErrShuttingDown
 </span>        }
-        <span class="cov9" title="4543">select </span>{
+        <span class="cov9" title="3969">select </span>{
         case p.events &lt;- ev:
-                <span class="cov9" title="4316">return nil</span>
+                <span class="cov9" title="3768">return nil</span>
         default:
-                <span class="cov6" title="227">return fmt.Errorf("ingest event: %w", ErrChanIsFull)</span>
+                <span class="cov6" title="201">return fmt.Errorf("ingest event: %w", ErrChanIsFull)</span>
         }
 }
 
@@ -882,31 +882,31 @@ func (p *Pipeline) runWorkers() {
         for range p.workerCount </span>{
                 <span class="cov5" title="80">wg.Go(func() </span>{
                         <span class="cov5" title="80">for </span>{
-                                <span class="cov9" title="4376">select </span>{
+                                <span class="cov9" title="3828">select </span>{
 
                                 case &lt;-p.stopCtx.Done():
-                                        <span class="cov3" title="7">if n := len(p.events); n &gt; 0 </span>{
+                                        <span class="cov2" title="3">if n := len(p.events); n &gt; 0 </span>{
                                                 <span class="cov0" title="0">p.log.Warn("events left in pipeline", slog.Int("count", n))
 </span>                                        }
-                                        <span class="cov3" title="7">return</span>
+                                        <span class="cov2" title="3">return</span>
 
                                 case ev, ok := &lt;-p.events:
-                                        <span class="cov9" title="4369">if !ok </span>{
-                                                <span class="cov5" title="73">p.log.Info("events drained")
+                                        <span class="cov9" title="3825">if !ok </span>{
+                                                <span class="cov5" title="77">p.log.Info("events drained")
                                                 return
 </span>                                        }
 
-                                        <span class="cov9" title="4296">if p.stopCtx.Err() != nil </span>{
+                                        <span class="cov9" title="3748">if p.stopCtx.Err() != nil </span>{
                                                 <span class="cov0" title="0">p.log.Warn("events left in pipeline", slog.Int("count", len(p.events)+1))
                                                 return
 </span>                                        }
 
-                                        <span class="cov9" title="4296">procCtx, cancel := context.WithTimeout(p.stopCtx, p.workerTimeout)
+                                        <span class="cov9" title="3748">procCtx, cancel := context.WithTimeout(p.stopCtx, p.workerTimeout)
                                         drop := p.runProcessors(procCtx, &amp;ev)
                                         cancel()
 </span>
-                                        <span class="cov9" title="4296">if !drop </span>{
-                                                <span class="cov9" title="4276">sinkCtx, cancel := context.WithTimeout(p.stopCtx, p.sinkTimeout)
+                                        <span class="cov9" title="3748">if !drop </span>{
+                                                <span class="cov9" title="3728">sinkCtx, cancel := context.WithTimeout(p.stopCtx, p.sinkTimeout)
                                                 err := p.sink(sinkCtx, ev)
                                                 cancel()
                                                 if err != nil </span>{
@@ -927,9 +927,9 @@ func (p *Pipeline) runWorkers() {
 }
 
 func (p *Pipeline) runProcessors(ctx context.Context, ev *event.Event) bool {
-        <span class="cov9" title="4296">var drop bool
+        <span class="cov9" title="3748">var drop bool
 </span>
-        <span class="cov9" title="4296">for _, processor := range p.processors </span>{
+        <span class="cov9" title="3748">for _, processor := range p.processors </span>{
                 <span class="cov5" title="45">var err error
                 drop, err = processor.Process(ctx, ev)
                 if err != nil </span>{
@@ -944,7 +944,7 @@ func (p *Pipeline) runProcessors(ctx context.Context, ev *event.Event) bool {
                         <span class="cov4" title="20">return drop
 </span>                }
         }
-        <span class="cov9" title="4276">return false</span>
+        <span class="cov9" title="3728">return false</span>
 }
 </pre>
 		

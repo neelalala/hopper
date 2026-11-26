@@ -64,7 +64,21 @@ TBD
 
 ## Тестирование и бенчмарки
 
-TBD
+Запуск тестов:
+
+```sh
+make test 
+# или 
+# go test -v -race --count=5 ./.. 
+# go vet ./...
+```
+
+### Покрытие
+
+```
+github.com/neelalala/hopper/internal/batcher      coverage: 95.8% of statements
+github.com/neelalala/hopper/internal/pipeline     coverage: 97.2% of statements
+```
 
 ## Состояние проекта
 

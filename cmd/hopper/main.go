@@ -56,10 +56,10 @@ func run(cfg config.Config, log *slog.Logger) error {
 	go b.Start()
 
 	procs := []pipeline.Processor{new(processors.Validate)}
-	p := pipeline.New(procs, b.Add, pipeline.WithLogger(log), pipeline.WithWorkerCount(4))
+	p := pipeline.New(procs, b.Add, pipeline.WithLogger(log.With(slog.String("service", "pipeline"))), pipeline.WithWorkerCount(4))
 	go p.Start()
 
-	s := server.New(cfg.HTTPServer.Address, p, log)
+	s := server.New(cfg.HTTPServer.Address, p, log.With(slog.String("service", "http server")))
 	go func() {
 		if err := s.Start(); err != nil {
 			log.Error("run http server", slog.String("error", err.Error()))

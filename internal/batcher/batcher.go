@@ -67,6 +67,7 @@ func New(evRepo EventRepository, opts ...Option) *Batcher {
 		evRepo:                  evRepo,
 		stopCtx:                 stopCtx,
 		stopCancel:              stopCancel,
+		closing:                 make(chan struct{}),
 		done:                    make(chan struct{}),
 		log:                     slog.New(slog.DiscardHandler),
 	}

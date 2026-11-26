@@ -42,8 +42,8 @@ func WithWorkerCount(count int) Option {
 }
 
 func WithSendTickerDuration(duration time.Duration) Option {
-	if duration < 0 {
-		panic("negative ticker duration")
+	if duration <= 0 {
+		panic("send batch ticker duration must be positive")
 	}
 	return func(b *Batcher) {
 		b.batchSendTickerDuration = duration

@@ -1,0 +1,13 @@
+pipeline:
+  sink-timeout: 30s
+  worker-count: 4
+
+batcher:
+  worker-count: 1
+
+http-server:
+  address: ":8080"
+
+logger:
+  level: "DEBUG"
+  add-sorce: false

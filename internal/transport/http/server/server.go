@@ -22,7 +22,11 @@ type Server struct {
 }
 
 func New(addr string, ingester EventIngester, log *slog.Logger) *Server {
+	handler := NewHandler(ingester, log.With(slog.String("handler", "events")))
+
 	mux := http.NewServeMux()
+
+	mux.HandleFunc("POST /events", handler.HandleEvent)
 
 	httpServer := &http.Server{
 		Addr:    addr,
@@ -34,8 +38,6 @@ func New(addr string, ingester EventIngester, log *slog.Logger) *Server {
 		ingester:   ingester,
 		log:        log,
 	}
-
-	mux.HandleFunc("POST /events", server.HandleEvent)
 
 	return server
 }

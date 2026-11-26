@@ -11,3 +11,9 @@ http-server:
 logger:
   level: "DEBUG"
   add-sorce: false
+
+clickhouse:
+  address: "localhost:9000"
+  database: "default"
+  username: "clickhouse"
+  password: "clickhouse"

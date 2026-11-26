@@ -17,8 +17,8 @@ type shard[K comparable, V any] struct {
 }
 
 type ShardedCache[K comparable, V any] struct {
-	shards []shard[K, V]
-	hash   func(K) uint64
+	shards []*shard[K, V]
+	hasher func(K) uint64
 }
 
 func NewSharded[K comparable, V any](shardCount int) (*ShardedCache[K, V], error) {
@@ -26,9 +26,11 @@ func NewSharded[K comparable, V any](shardCount int) (*ShardedCache[K, V], error
 		return nil, errors.New("shard count must be positive")
 	}
 
-	shards := make([]shard[K, V], shardCount)
+	shards := make([]*shard[K, V], shardCount)
 	for i := range shards {
-		shards[i].data = make(map[K]V)
+		shards[i] = &shard[K, V]{
+			data: make(map[K]V),
+		}
 	}
 
 	return &ShardedCache[K, V]{

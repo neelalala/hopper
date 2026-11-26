@@ -37,7 +37,7 @@ func WithSinkTimeout(timeout time.Duration) Option {
 		panic("sink timeout must be positive")
 	}
 	return func(p *Pipeline) {
-		p.workerTimeout = timeout
+		p.sinkTimeout = timeout
 	}
 }
 

@@ -28,7 +28,7 @@ func WithEventsChanBufferSize(size int) Option {
 		panic("negative evnts buffer size")
 	}
 	return func(b *Batcher) {
-		b.flushChSize = size
+		b.eventsChSize = size
 	}
 }
 

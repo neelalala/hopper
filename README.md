@@ -21,7 +21,42 @@ TCP-батчем, а при недоступности СУБД – сохран
 
 ## Архитектура
 
-TBD
+```mermaid
+flowchart LR
+    Client([Clients]) -->|POST /events| HTTP[HTTP Transport]
+    HTTP -->|non-blocking Ingest| Pipeline[Pipeline<br/>Worker Pool]
+    Pipeline -->|sync processing| Chain[Processor Chain<br/>validate · dedup · enrich]
+    Chain -->|keep / drop| Pipeline
+    Pipeline -->|Push| Batcher[Batcher<br/>size / timer flush]
+    Batcher -->|flush workers| CH[(ClickHouse)]
+```
+
+1. HTTP-хендлер кладет событие в буфферизированный канал без блокировки, если
+канал полный, возвращает клиенту ошибку `429 Too Many Requests`
+2. `Pipeline` упарвляет многопоточной обработкой процессоров, сама логика
+обработки событий - цепь из разных процессоров
+3. Сброс батчей происходит по двум триггерам: размер батча стал равен целевому
+либо сработал таймер и батч не пустой
+4. `Batcher` отправляет сформированные батчи в канал `flushCh`, из которого
+его воркеры забирают батчи и отправляют из в ClickHouse
+5. Гарантия доставки батчей `at-most-once` в случайном порядке при нескольких
+воркерах `Batcher`
+6. Ступенчатый Graceful Shutdown:
+   1. Отключается прием новых HTTP запросов,
+   2. `Pipeline` закрывает прием новых событий и дорабатывает полученные,
+   3. `Batcher` закрывает прием новых событий, отправляет последний батч и
+   ждет отправку батчей.
+
+### Структура проекта
+
+- `internal/event` – стурктура события
+- `internal/transport/http/server` – приём событий, парсинг JSON, маппинг
+ошибок и формирование ответа
+- `internal/pipeline` – входной буффер с воркер-пулом обработчиков процессоров
+- `internal/pipeline/processors` – процессоры событий
+- `internal/batcher` – накопление батчей и отправка их по размеру или таймеру
+- `internal/config` – конфигурация приложения
+- `internal/cache` – шардированный кеш
 
 ## API и схема данных
 

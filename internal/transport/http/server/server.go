@@ -1,6 +1,8 @@
 package server
 
 import (
+	"context"
+	"errors"
 	"log/slog"
 	"net/http"
 
@@ -36,4 +38,19 @@ func New(addr string, ingester EventIngester, log *slog.Logger) *Server {
 	mux.HandleFunc("POST /events", server.HandleEvent)
 
 	return server
+}
+
+func (s *Server) Start() error {
+	defer s.log.Info("server stopped")
+	s.log.Info("server satrted", slog.String("address", s.httpServer.Addr))
+	if err := s.httpServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		return err
+	}
+	return nil
+}
+
+func (s *Server) Shutdown(ctx context.Context) error {
+	defer s.log.Info("server shutted down")
+	s.log.Info("shutting down server")
+	return s.httpServer.Shutdown(ctx)
 }

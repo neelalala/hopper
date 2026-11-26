@@ -2,14 +2,9 @@ package cache
 
 import (
 	"errors"
+	"hash/maphash"
 	"sync"
 )
-
-type Cache[K comparable, V any] interface {
-	Get(key K) (V, bool)
-	Put(key K, value V)
-	Delete(key K)
-}
 
 type shard[K comparable, V any] struct {
 	sync.RWMutex
@@ -33,22 +28,50 @@ func NewSharded[K comparable, V any](shardCount int) (*ShardedCache[K, V], error
 		}
 	}
 
+	seed := maphash.MakeSeed()
+	hasher := func(key K) uint64 {
+		return maphash.Comparable(seed, key)
+	}
+
 	return &ShardedCache[K, V]{
 		shards: shards,
-		hash:   nil,
+		hasher: hasher,
 	}, nil
 }
 
 func (c *ShardedCache[K, V]) Get(key K) (V, bool) {
-	var (
-		zeroV    V
-		zeroBool bool
-	)
-	return zeroV, zeroBool
+	hash := c.hasher(key)
+
+	return c.shards[hash%uint64(len(c.shards))].get(key)
 }
 
 func (c *ShardedCache[K, V]) Put(key K, val V) {
+	hash := c.hasher(key)
+
+	c.shards[hash%uint64(len(c.shards))].put(key, val)
 }
 
 func (c *ShardedCache[K, V]) Delete(key K) {
+	hash := c.hasher(key)
+
+	c.shards[hash%uint64(len(c.shards))].delete(key)
+}
+
+func (s *shard[K, V]) get(key K) (V, bool) {
+	s.RLock()
+	defer s.RUnlock()
+	val, ok := s.data[key]
+	return val, ok
+}
+
+func (s *shard[K, V]) put(key K, val V) {
+	s.Lock()
+	defer s.Unlock()
+	s.data[key] = val
+}
+
+func (s *shard[K, V]) delete(key K) {
+	s.Lock()
+	defer s.Unlock()
+	delete(s.data, key)
 }

@@ -40,11 +40,16 @@ func run(cfg config.Config, log *slog.Logger) error {
 		cfg.Clickhouse.Database,
 		cfg.Clickhouse.Username,
 		cfg.Clickhouse.Password,
+		log,
 	)
 	if err != nil {
 		return fmt.Errorf("create event repository: %w", err)
 	}
-	defer evRepo.Close()
+	defer func() {
+		if err := evRepo.Close(); err != nil {
+			log.Warn("close event repository", slog.String("error", err.Error()))
+		}
+	}()
 
 	batcherOpts := makeBatcherOptions(cfg.Batcher)
 	batcherOpts = append(batcherOpts, batcher.WithLogger(log.With(slog.String("service", "batcher"))))

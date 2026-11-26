@@ -28,7 +28,10 @@ type HTTPServerConfig struct {
 }
 
 type ClickhouseConfig struct {
-	// TODO: dsn
+	Address  string `yaml:"address" env:"CLICKHOUSE_ADDRESS"`
+	Database string `yaml:"database" env:"CLICKHOUSE_DATABASE"`
+	Username string `yaml:"username" env:"CLICKHOUSE_USERNAME"`
+	Password string `yaml:"password" env:"CLICKHOUSE_PASSWORD"`
 }
 
 type LoggerConfig struct {

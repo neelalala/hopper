@@ -11,10 +11,25 @@ import (
 
 	"github.com/neelalala/hopper/internal/batcher"
 	"github.com/neelalala/hopper/internal/config"
+	"github.com/neelalala/hopper/internal/event"
 	"github.com/neelalala/hopper/internal/pipeline"
 	"github.com/neelalala/hopper/internal/pipeline/processors"
 	"github.com/neelalala/hopper/internal/transport/http/server"
 )
+
+type mockEvRepo struct {
+	log *slog.Logger
+}
+
+func (m *mockEvRepo) CreateEvents(_ context.Context, evs []event.Event) error {
+	m.log.Debug(
+		"create events",
+		"count", len(evs),
+		"first", evs[0],
+		"last", evs[len(evs)-1],
+	)
+	return nil
+}
 
 func main() {
 	cfg, err := config.Parse("config.yaml")
@@ -34,7 +49,7 @@ func run(cfg config.Config, log *slog.Logger) error {
 	signalChan := make(chan os.Signal, 1)
 	signal.Notify(signalChan, syscall.SIGINT, syscall.SIGTERM)
 
-	var evRepo batcher.EventRepository
+	evRepo := &mockEvRepo{log}
 	batcherOpts := makeBatcherOptions(cfg.Batcher)
 	batcherOpts = append(batcherOpts, batcher.WithLogger(log.With(slog.String("service", "batcher"))))
 	b := batcher.New(evRepo, batcherOpts...)

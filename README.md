@@ -68,8 +68,8 @@ TBD
 
 ## Состояние проекта
 
-- [Этап 1. Core / v0.1](ROADMAP.md) Активная разработка
-- Этап 2. Configurable pipeline / v0.2
-- Этап 3. Lua-scripts / v0.3
-- Этап 4. Dynamic ClickHouse schema / v0.4
-- Этап 5. MVP / v1.0
+- [Этап 1. Core / v0.1](ROADMAP.md#этап-1-core--v01-ядро-конвейера-многопоточность-работа-с-http-и-clickhouse) Активная разработка
+- [Этап 2. Configurable pipeline / v0.2](ROADMAP.md#этап-2-configurable-pipeline--v02-конфигурируемый-пайплайн-и-отказоустойчивость)
+- [Этап 3. Lua-scripts / v0.3](ROADMAP.md#этап-3-lua-scripts--v03-поддержка-пользовательских-процессоров-на-lua-из-конфигурации)
+- [Этап 4. Dynamic ClickHouse schema / v0.4](ROADMAP.md#этап-4-dynamic-clickhouse-schema--v04-динамическая-схема-и-маппинг-на-таблицу-пользователя)
+- [Этап 5. MVP / v1.0](ROADMAP.md#этап-5-mvp--v10-оптимизация-и-observability)

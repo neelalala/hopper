@@ -9,4 +9,10 @@ test:
 	go tool cover -html=coverage.out -o coverage.html
 	go vet ./...
 
+clickhouse-up:
+	docker compose up -d clickhouse
+
+clickhouse-down:
+	docker compose down clickhouse
+
 .PHONY: run build test

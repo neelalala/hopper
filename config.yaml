@@ -10,4 +10,4 @@ http-server:
 
 logger:
   level: "DEBUG"
-  add-sorce: true
+  add-sorce: false
